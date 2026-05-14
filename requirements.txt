@@ -1,6 +1,6 @@
 fastapi==0.103.2
 uvicorn==0.23.2
-google-generativeai==0.3.2
+google-generativeai==0.5.4
 supabase==1.2.0
 httpx==0.24.1
 pydantic==1.10.13
