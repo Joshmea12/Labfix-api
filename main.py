@@ -1,5 +1,5 @@
 """
-LabFix AI — FastAPI Backend
+LabFix AI -- FastAPI Backend
 Stack: FastAPI + Gemini API + Supabase + Paystack
 Deploy: Railway
 """
@@ -30,7 +30,7 @@ logger = logging.getLogger("labfix")
 # ENVIRONMENT VARIABLES (set these in Railway)
 # ─────────────────────────────────────────────
 SUPABASE_URL        = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]   # service role key — never expose
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]   # service role key -- never expose
 GEMINI_API_KEY      = os.environ["GEMINI_API_KEY"]
 PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]     # sk_test_... or sk_live_...
 
@@ -41,13 +41,13 @@ genai.configure(api_key=GEMINI_API_KEY)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ─────────────────────────────────────────────
-# GEMINI — ANTI-HALLUCINATION SYSTEM PROMPT
+# GEMINI -- ANTI-HALLUCINATION SYSTEM PROMPT
 # ─────────────────────────────────────────────
 LABFIX_SYSTEM_PROMPT = """
 You are LabFix AI, a specialized laboratory equipment diagnostic and predictive maintenance assistant.
 You serve lab technicians, biomedical engineers, and research scientists worldwide.
 
-STRICT RULES — follow these without any exception:
+STRICT RULES -- follow these without any exception:
 
 1. NEVER fabricate or guess a diagnosis. If you cannot confidently identify the equipment
    or fault from the image or description, respond exactly:
@@ -106,7 +106,7 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# CORS — only allow your Lovable frontend
+# CORS -- only allow your Lovable frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -120,7 +120,7 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────────
-# AUTH HELPER — Verify Supabase JWT
+# AUTH HELPER -- Verify Supabase JWT
 # ─────────────────────────────────────────────
 async def get_current_user(authorization: str = Header(...)):
     """Extract and verify the user from the Supabase JWT token."""
@@ -214,7 +214,7 @@ async def health_check():
 
 
 # ─────────────────────────────────────────────
-# SNAP & DIAGNOSE — Core AI Feature
+# SNAP & DIAGNOSE -- Core AI Feature
 # ─────────────────────────────────────────────
 @app.post("/diagnose")
 async def diagnose_equipment(
@@ -233,11 +233,76 @@ async def diagnose_equipment(
         ).execute()
 
         result = usage.data
-< truncated lines 236-301 >
+
+        if not result.get("allowed"):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "free_limit_reached",
+                    "message": "You have used all 5 free diagnoses this month. Upgrade to Pro for unlimited access.",
+                    "count": result.get("count"),
+                    "plan": result.get("plan")
+                }
+            )
+
+        # Decode image and send to Gemini
+        try:
+            image_data = base64.b64decode(body.image_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 image data")
+
+        prompt = f"""
+        Analyze this laboratory equipment image carefully.
+        Symptom reported by technician: {body.symptom}
+
+        Provide a full diagnostic report following your strict rules.
+        """
+
+        response = gemini_model.generate_content([
+            {
+                "mime_type": body.media_type,
+                "data": image_data
+            },
+            prompt
+        ])
+
+        diagnosis_text = response.text if response.text else (
+            "I cannot make a confident diagnosis from the information provided. "
+            "Please provide a clearer image or more specific details."
+        )
+
+        return {
+            "success": True,
+            "diagnosis": diagnosis_text,
+            "usage": {
+                "count": result.get("count"),
+                "plan": result.get("plan"),
+                "remaining": max(0, 5 - result.get("count", 0)) if result.get("plan") == "free" else "unlimited"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Diagnosis error for user {user.id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Diagnosis service temporarily unavailable")
+
+
+# ─────────────────────────────────────────────
+# SEARCH -- AI-Powered Equipment Search
+# ─────────────────────────────────────────────
+@app.post("/search")
+async def search_equipment(
+    body: SearchRequest,
+    user=Depends(get_current_user)
+):
+    """Search for equipment repair guidance using Gemini."""
+    try:
+        prompt = f"""
         A lab technician is asking about: {body.query}
 
         If this is related to laboratory equipment, scientific instruments,
-        or industrial machines — provide helpful, accurate maintenance or
+        or industrial machines -- provide helpful, accurate maintenance or
         repair guidance following your strict rules.
 
         If this is unrelated to lab equipment, follow your rules and decline.
@@ -256,7 +321,7 @@ async def diagnose_equipment(
 
 
 # ─────────────────────────────────────────────
-# REPAIR LOGS — CRUD
+# REPAIR LOGS -- CRUD
 # ─────────────────────────────────────────────
 @app.get("/repair-logs")
 async def get_repair_logs(user=Depends(get_current_user)):
@@ -316,7 +381,7 @@ async def delete_repair_log(
 
 
 # ─────────────────────────────────────────────
-# MACHINES — CRUD
+# MACHINES -- CRUD
 # ─────────────────────────────────────────────
 @app.get("/machines")
 async def get_machines(user=Depends(get_current_user)):
@@ -354,7 +419,7 @@ async def create_machine(
 
 
 # ─────────────────────────────────────────────
-# USER PROFILE — Plan and Usage
+# USER PROFILE -- Plan and Usage
 # ─────────────────────────────────────────────
 @app.get("/profile")
 async def get_profile(user=Depends(get_current_user)):
@@ -373,7 +438,7 @@ async def get_profile(user=Depends(get_current_user)):
 
 
 # ─────────────────────────────────────────────
-# PAYSTACK — Payment Webhook
+# PAYSTACK -- Payment Webhook
 # ─────────────────────────────────────────────
 @app.post("/webhook/paystack")
 async def paystack_webhook(request: Request):
@@ -382,7 +447,7 @@ async def paystack_webhook(request: Request):
     Upgrades user plan on successful payment.
     SECURITY: Verifies HMAC signature from Paystack.
     """
-    # Verify webhook signature (OWASP A07 — prevent spoofed webhooks)
+    # Verify webhook signature (OWASP A07 -- prevent spoofed webhooks)
     paystack_signature = request.headers.get("x-paystack-signature")
     if not paystack_signature:
         raise HTTPException(status_code=400, detail="Missing Paystack signature")
@@ -459,7 +524,7 @@ async def paystack_webhook(request: Request):
 
 
 # ─────────────────────────────────────────────
-# GLOBAL ERROR HANDLER — Never expose internals
+# GLOBAL ERROR HANDLER -- Never expose internals
 # ─────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -467,4 +532,4 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Something went wrong. Please try again."}
-)
+    )
