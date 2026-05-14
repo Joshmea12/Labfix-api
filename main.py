@@ -1,5 +1,5 @@
 """
-LabFix AI -- FastAPI Backend
+LabFix AI — FastAPI Backend
 Stack: FastAPI + Gemini API + Supabase + Paystack
 Deploy: Railway
 """
@@ -17,7 +17,7 @@ import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, EmailStr, field_validator
 from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
@@ -30,7 +30,7 @@ logger = logging.getLogger("labfix")
 # ENVIRONMENT VARIABLES (set these in Railway)
 # ─────────────────────────────────────────────
 SUPABASE_URL        = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]   # service role key -- never expose
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]   # service role key — never expose
 GEMINI_API_KEY      = os.environ["GEMINI_API_KEY"]
 PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]     # sk_test_... or sk_live_...
 
@@ -41,13 +41,13 @@ genai.configure(api_key=GEMINI_API_KEY)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ─────────────────────────────────────────────
-# GEMINI -- ANTI-HALLUCINATION SYSTEM PROMPT
+# GEMINI — ANTI-HALLUCINATION SYSTEM PROMPT
 # ─────────────────────────────────────────────
 LABFIX_SYSTEM_PROMPT = """
 You are LabFix AI, a specialized laboratory equipment diagnostic and predictive maintenance assistant.
 You serve lab technicians, biomedical engineers, and research scientists worldwide.
 
-STRICT RULES -- follow these without any exception:
+STRICT RULES — follow these without any exception:
 
 1. NEVER fabricate or guess a diagnosis. If you cannot confidently identify the equipment
    or fault from the image or description, respond exactly:
@@ -106,7 +106,7 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# CORS -- only allow your Lovable frontend
+# CORS — only allow your Lovable frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -120,7 +120,7 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────────
-# AUTH HELPER -- Verify Supabase JWT
+# AUTH HELPER — Verify Supabase JWT
 # ─────────────────────────────────────────────
 async def get_current_user(authorization: str = Header(...)):
     """Extract and verify the user from the Supabase JWT token."""
@@ -147,13 +147,15 @@ class DiagnoseRequest(BaseModel):
     symptom: Optional[str] = "No symptom described"
     media_type: Optional[str] = "image/jpeg"
 
-    @validator("image_base64")
+    @field_validator("image_base64")
+    @classmethod
     def validate_image(cls, v):
         if not v or len(v) < 100:
             raise ValueError("Invalid image data")
         return v
 
-    @validator("media_type")
+    @field_validator("media_type")
+    @classmethod
     def validate_media_type(cls, v):
         allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"]
         if v not in allowed:
@@ -168,7 +170,8 @@ class RepairLogRequest(BaseModel):
     notes: Optional[str] = ""
     technician: str
 
-    @validator("machine", "symptom", "fault", "technician")
+    @field_validator("machine", "symptom", "fault", "technician")
+    @classmethod
     def sanitize_fields(cls, v):
         if not v or len(v.strip()) < 2:
             raise ValueError("Field cannot be empty")
@@ -182,7 +185,8 @@ class MachineRequest(BaseModel):
     category: str
     icon: Optional[str] = "🔬"
 
-    @validator("name", "category")
+    @field_validator("name", "category")
+    @classmethod
     def sanitize_fields(cls, v):
         if not v or len(v.strip()) < 2:
             raise ValueError("Field cannot be empty")
@@ -192,7 +196,8 @@ class MachineRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str
 
-    @validator("query")
+    @field_validator("query")
+    @classmethod
     def sanitize_query(cls, v):
         if not v or len(v.strip()) < 3:
             raise ValueError("Search query too short")
@@ -214,7 +219,7 @@ async def health_check():
 
 
 # ─────────────────────────────────────────────
-# SNAP & DIAGNOSE -- Core AI Feature
+# SNAP & DIAGNOSE — Core AI Feature
 # ─────────────────────────────────────────────
 @app.post("/diagnose")
 async def diagnose_equipment(
@@ -289,7 +294,7 @@ async def diagnose_equipment(
 
 
 # ─────────────────────────────────────────────
-# SEARCH -- AI-Powered Equipment Search
+# SEARCH — AI-Powered Equipment Search
 # ─────────────────────────────────────────────
 @app.post("/search")
 async def search_equipment(
@@ -302,7 +307,7 @@ async def search_equipment(
         A lab technician is asking about: {body.query}
 
         If this is related to laboratory equipment, scientific instruments,
-        or industrial machines -- provide helpful, accurate maintenance or
+        or industrial machines — provide helpful, accurate maintenance or
         repair guidance following your strict rules.
 
         If this is unrelated to lab equipment, follow your rules and decline.
@@ -321,7 +326,7 @@ async def search_equipment(
 
 
 # ─────────────────────────────────────────────
-# REPAIR LOGS -- CRUD
+# REPAIR LOGS — CRUD
 # ─────────────────────────────────────────────
 @app.get("/repair-logs")
 async def get_repair_logs(user=Depends(get_current_user)):
@@ -381,7 +386,7 @@ async def delete_repair_log(
 
 
 # ─────────────────────────────────────────────
-# MACHINES -- CRUD
+# MACHINES — CRUD
 # ─────────────────────────────────────────────
 @app.get("/machines")
 async def get_machines(user=Depends(get_current_user)):
@@ -419,7 +424,7 @@ async def create_machine(
 
 
 # ─────────────────────────────────────────────
-# USER PROFILE -- Plan and Usage
+# USER PROFILE — Plan and Usage
 # ─────────────────────────────────────────────
 @app.get("/profile")
 async def get_profile(user=Depends(get_current_user)):
@@ -438,7 +443,7 @@ async def get_profile(user=Depends(get_current_user)):
 
 
 # ─────────────────────────────────────────────
-# PAYSTACK -- Payment Webhook
+# PAYSTACK — Payment Webhook
 # ─────────────────────────────────────────────
 @app.post("/webhook/paystack")
 async def paystack_webhook(request: Request):
@@ -447,7 +452,7 @@ async def paystack_webhook(request: Request):
     Upgrades user plan on successful payment.
     SECURITY: Verifies HMAC signature from Paystack.
     """
-    # Verify webhook signature (OWASP A07 -- prevent spoofed webhooks)
+    # Verify webhook signature (OWASP A07 — prevent spoofed webhooks)
     paystack_signature = request.headers.get("x-paystack-signature")
     if not paystack_signature:
         raise HTTPException(status_code=400, detail="Missing Paystack signature")
@@ -456,9 +461,9 @@ async def paystack_webhook(request: Request):
 
     # Compute HMAC-SHA512 signature
     expected_signature = hmac.new(
-        key=PAYSTACK_SECRET_KEY.encode("utf-8"),
-        msg=body_bytes,
-        digestmod=hashlib.sha512
+        PAYSTACK_SECRET_KEY.encode("utf-8"),
+        body_bytes,
+        hashlib.sha512
     ).hexdigest()
 
     if not hmac.compare_digest(expected_signature, paystack_signature):
@@ -524,7 +529,7 @@ async def paystack_webhook(request: Request):
 
 
 # ─────────────────────────────────────────────
-# GLOBAL ERROR HANDLER -- Never expose internals
+# GLOBAL ERROR HANDLER — Never expose internals
 # ─────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
