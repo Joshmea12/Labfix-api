@@ -17,7 +17,7 @@ import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, validator
 from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
@@ -147,15 +147,13 @@ class DiagnoseRequest(BaseModel):
     symptom: Optional[str] = "No symptom described"
     media_type: Optional[str] = "image/jpeg"
 
-    @field_validator("image_base64")
-    @classmethod
+    @validator("image_base64")
     def validate_image(cls, v):
         if not v or len(v) < 100:
             raise ValueError("Invalid image data")
         return v
 
-    @field_validator("media_type")
-    @classmethod
+    @validator("media_type")
     def validate_media_type(cls, v):
         allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"]
         if v not in allowed:
@@ -170,8 +168,7 @@ class RepairLogRequest(BaseModel):
     notes: Optional[str] = ""
     technician: str
 
-    @field_validator("machine", "symptom", "fault", "technician")
-    @classmethod
+    @validator("machine", "symptom", "fault", "technician")
     def sanitize_fields(cls, v):
         if not v or len(v.strip()) < 2:
             raise ValueError("Field cannot be empty")
@@ -185,8 +182,7 @@ class MachineRequest(BaseModel):
     category: str
     icon: Optional[str] = "🔬"
 
-    @field_validator("name", "category")
-    @classmethod
+    @validator("name", "category")
     def sanitize_fields(cls, v):
         if not v or len(v.strip()) < 2:
             raise ValueError("Field cannot be empty")
@@ -196,8 +192,7 @@ class MachineRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str
 
-    @field_validator("query")
-    @classmethod
+    @validator("query")
     def sanitize_query(cls, v):
         if not v or len(v.strip()) < 3:
             raise ValueError("Search query too short")
@@ -238,72 +233,7 @@ async def diagnose_equipment(
         ).execute()
 
         result = usage.data
-
-        if not result.get("allowed"):
-            raise HTTPException(
-                status_code=429,
-                detail={
-                    "error": "free_limit_reached",
-                    "message": "You have used all 5 free diagnoses this month. Upgrade to Pro for unlimited access.",
-                    "count": result.get("count"),
-                    "plan": result.get("plan")
-                }
-            )
-
-        # Decode image and send to Gemini
-        try:
-            image_data = base64.b64decode(body.image_base64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid base64 image data")
-
-        prompt = f"""
-        Analyze this laboratory equipment image carefully.
-        Symptom reported by technician: {body.symptom}
-
-        Provide a full diagnostic report following your strict rules.
-        """
-
-        response = gemini_model.generate_content([
-            {
-                "mime_type": body.media_type,
-                "data": image_data
-            },
-            prompt
-        ])
-
-        diagnosis_text = response.text if response.text else (
-            "I cannot make a confident diagnosis from the information provided. "
-            "Please provide a clearer image or more specific details."
-        )
-
-        return {
-            "success": True,
-            "diagnosis": diagnosis_text,
-            "usage": {
-                "count": result.get("count"),
-                "plan": result.get("plan"),
-                "remaining": max(0, 5 - result.get("count", 0)) if result.get("plan") == "free" else "unlimited"
-            }
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Diagnosis error for user {user.id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Diagnosis service temporarily unavailable")
-
-
-# ─────────────────────────────────────────────
-# SEARCH — AI-Powered Equipment Search
-# ─────────────────────────────────────────────
-@app.post("/search")
-async def search_equipment(
-    body: SearchRequest,
-    user=Depends(get_current_user)
-):
-    """Search for equipment repair guidance using Gemini."""
-    try:
-        prompt = f"""
+< truncated lines 236-301 >
         A lab technician is asking about: {body.query}
 
         If this is related to laboratory equipment, scientific instruments,
@@ -461,9 +391,9 @@ async def paystack_webhook(request: Request):
 
     # Compute HMAC-SHA512 signature
     expected_signature = hmac.new(
-        PAYSTACK_SECRET_KEY.encode("utf-8"),
-        body_bytes,
-        hashlib.sha512
+        key=PAYSTACK_SECRET_KEY.encode("utf-8"),
+        msg=body_bytes,
+        digestmod=hashlib.sha512
     ).hexdigest()
 
     if not hmac.compare_digest(expected_signature, paystack_signature):
@@ -537,4 +467,4 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"error": "Something went wrong. Please try again."}
-    )
+)
