@@ -17,7 +17,7 @@ import google.generativeai as genai
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, validator
 from supabase import create_client, Client
 
 # ─────────────────────────────────────────────
