@@ -373,7 +373,30 @@ async def paystack_webhook(request: Request):
             return {"status": "error"}
 
     return {"status": "ok"}
+# -- COPILOT CHAT ──────────────────────────────
+class ChatRequest(BaseModel):
+    message: str
 
+    @validator("message")
+    def validate_message(cls, v):
+        if not v or len(v.strip()) < 2:
+            raise ValueError("Message too short")
+        if len(v) > 1000:
+            raise ValueError("Message too long")
+        return v.strip()
+
+@app.post("/chat")
+async def copilot_chat(body: ChatRequest, user=Depends(get_current_user)):
+    try:
+        prompt = f"{SYSTEM_PROMPT}\n\nA lab technician asks: {body.message}\n\nProvide clear technical guidance."
+        response = gemini_model.generate_content(prompt)
+        return {
+            "success": True,
+            "response": response.text or "Could not generate response. Please try again."
+        }
+    except Exception as e:
+        logger.error(f"Copilot error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Copilot service temporarily unavailable")
 # ── GLOBAL ERROR HANDLER ──────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
